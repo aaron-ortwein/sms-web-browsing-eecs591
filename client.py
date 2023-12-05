@@ -15,14 +15,21 @@ from node import Endpoint
 from archive_utils import archive, request_via_internet, now_timestamp_ms, datetime_to_posix_timestamp
 from protocol import *
 
-CLIENT_PHONE_NUMBER = "0123456789"
-SERVER_PHONE_NUMBER = "0123456789"
+CLIENT_PHONE_NUMBER = "+10123456789"
+CLIENT_DEVICE_ID = ""
+SERVER_PHONE_NUMBER = "+10123456789"
 SERVER_URL = "http://localhost:5000"
 LOCK_FILE = "client.lock"
 SYMMETRIC_KEY_FILE = "sms_client_key.key"
 ARCHIVE_FILE = "client_archives.db"
 
 class SMSClient(Endpoint):
+    def __init__(self):
+        self.device_id = CLIENT_DEVICE_ID
+
+    def get_device_id(self):
+        return self.device_id
+    
     def get_symmetric_key(self, address):
         with open(SYMMETRIC_KEY_FILE, "rb") as file:
             return file.read()
@@ -32,7 +39,7 @@ class SMSClient(Endpoint):
             print("Client can only make one request at a time")
             return
         
-        db = sqlitedict.SqliteDict("client_archives.db")
+        db = sqlitedict.SqliteDict(ARCHIVE_FILE)
         # Don't allow client to request non-cached pages, it's too much data
         assert url in db
         latest_timestamp = max(db[url].keys())
@@ -60,7 +67,7 @@ class SMSClient(Endpoint):
                 server_timestamp, data = datetime.fromtimestamp(int.from_bytes(message[:4])), message[4:]
                 delta = brotli.decompress(data)
                 current_webpage = xdelta3.decode(latest_webpage_archive, delta)
-                archive(url, server_timestamp, current_webpage, "client_archives_2.db")
+                archive(url, server_timestamp, current_webpage, ARCHIVE_FILE)
                 end = now_timestamp_ms()
                 print(f"Bytes Received: {len(data)} | Delta Size (Bytes): {len(delta)} | Current Webpage Size (Bytes): {len(current_webpage)}")
                 print(f"End-to-end time: {end - request_start} ms")
@@ -86,12 +93,12 @@ class WebClient():
         ))
         encoded_encrypted_symmetric_key = str(base64.b64encode(encrypted_symmetric_key, altchars=b"_-"), "utf-8")
         
-        response = requests.get(f"{SERVER_URL}/kex?phone={CLIENT_PHONE_NUMBER}&key={encoded_encrypted_symmetric_key}")
+        response = requests.get(f"{SERVER_URL}/kex?phone={CLIENT_PHONE_NUMBER if CLIENT_PHONE_NUMBER[0] != '+' else CLIENT_PHONE_NUMBER[1:]}&key={encoded_encrypted_symmetric_key}")
         print(response.content)
 
     def request(self, url):
         response, timestamp = request_via_internet(f"{SERVER_URL}/?url={url}")
-        archive(url, timestamp, response.content, "client_archives_eval.db")
+        archive(url, timestamp, response.content, ARCHIVE_FILE)
 
 def main():
     parser = argparse.ArgumentParser()

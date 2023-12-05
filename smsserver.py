@@ -15,6 +15,8 @@ from node import Endpoint
 from archive_utils import archive, request_via_internet, datetime_to_posix_timestamp
 from protocol import *
 
+SERVER_DEVICE_ID = ""
+
 class Server(Endpoint):
     def __init__(self):
         if not os.path.exists("server_private_key.pem"):
@@ -25,9 +27,13 @@ class Server(Endpoint):
                 public_key = private_key.public_key()
                 file.write(public_key.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo))
 
+        self.device_id = SERVER_DEVICE_ID
         self.active_requests_from = set()
         self.lock = threading.Lock()
         self.ttl_cache = TTLCache(maxsize=10000, ttl=REQUEST_TIMEOUT)
+    
+    def get_device_id(self):
+        return self.device_id
 
     def get_symmetric_key(self, address):
         db = sqlitedict.SqliteDict("client_keys.db")
@@ -41,10 +47,11 @@ class Server(Endpoint):
         while True:
             # if we were using two phones, uri should be content://sms/inbox
             result = subprocess.run(
-                ["adb", "shell", "content", "query", "--uri", "content://sms", "--projection", "address:date:body"],
+                ["adb", "-s", self.device_id, "shell", "content", "query", "--uri", "content://sms", "--projection", "address:date:body"],
                 capture_output=True)
             lines = str(result.stdout, encoding="utf-8").split("\n")[:-1]
             num_lines = len(lines)
+
             if previous_result and num_lines > previous_result:
                 new_lines = lines[:(num_lines - previous_result)]
                 requests = []

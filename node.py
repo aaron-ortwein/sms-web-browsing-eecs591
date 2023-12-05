@@ -15,10 +15,14 @@ def bitvector_as_bytes(bitvector):
     return b''.join([int(bitvector[i:(i + 8)]).to_bytes() for i in range(0, len(bitvector), 8)])
 
 class Node(ABC):
+    @abstractmethod
+    def get_device_id(self):
+        raise NotImplementedError()
+    
     def send_sms(self, address, message):
         # assumes SIM card is in second slot of dual-SIM phone
         # also this is undocumented and may break for other versions of android since function signature can change ; this works for Android 12 and 13
-        os.system(f'adb shell service call isms 5 i32 1 s16 "com.android.mms.service" s16 "null" s16 "{address}" s16 "null" s16 "\'{message}\'" s16 "null" s16 "null" i32 1 i64 0')
+        os.system(f'adb -s {self.get_device_id()} shell service call isms 5 i32 1 s16 "com.android.mms.service" s16 "null" s16 "{address}" s16 "null" s16 "\'{message}\'" s16 "null" s16 "null" i32 1 i64 0')
 
 class Endpoint(Node, ABC):
     @abstractmethod
@@ -80,10 +84,11 @@ class Endpoint(Node, ABC):
         previous_result = 0
         while not other_recv_all_data:
             result = subprocess.run(
-                ["adb", "shell", "content", "query", "--uri", "content://sms", "--projection", "body", "--where", f"\"address=\'{address}\' and date >= {date}\"", "--sort", "\"date DESC\"", "|", 
+                ["adb", "-s", self.get_device_id(), "shell", "content", "query", "--uri", "content://sms", "--projection", "body", "--where", f"\"address=\'{address}\' and date >= {date}\"", "--sort", "\"date DESC\"", "|", 
                  "cut", "-d", "=", "-f", "2"],
                 capture_output=True)
             smses = str(result.stdout, encoding="utf-8").split("\n")[:-1]
+            
             try:
                 smses.remove("No result found.")
             except ValueError:
@@ -150,7 +155,7 @@ class Endpoint(Node, ABC):
         while recv_buffer is None or not all(recv_buffer):
             # if we were using two phones, uri should be content://sms/inbox
             result = subprocess.run(
-                ["adb", "shell", "content", "query", "--uri", "content://sms", "--projection", "body", "--where", f"\"address=\'{address}\' and date >= {date}\"", "--sort", "\"date DESC\"", "|", 
+                ["adb", "-s", self.get_device_id(), "shell", "content", "query", "--uri", "content://sms", "--projection", "body", "--where", f"\"address=\'{address}\' and date >= {date}\"", "--sort", "\"date DESC\"", "|", 
                  "cut", "-d", "=", "-f", "2"],
                 capture_output=True)
             smses = str(result.stdout, encoding="utf-8").split("\n")[:-1]

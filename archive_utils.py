@@ -21,6 +21,7 @@ def archive(url, timestamp, webpage, db_file):
             url_archives = db[url]
             url_archives[timestamp] = webpage
             db[url] = url_archives
+            print(list(db.keys()))
 
         db.commit()
         db.close()
